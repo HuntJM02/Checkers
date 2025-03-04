@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkers Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            width: 480px;
+            height: 480px;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .black {
+            background-color: #333;
+        }
+
+        .white {
+            background-color: #ddd;
+        }
+
+        .piece {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: grab;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .red {
+            background-color: red;
+        }
+
+        .black-piece {
+            background-color: black;
+        }
+
+        .king {
+            border: 3px solid gold;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="board" id="board"></div>
+    <script>
+        const board = document.getElementById("board");
+        let selectedPiece = null;
+        let activeCapturePiece = null;
+        moveResult = null;
+        let turn = "red";
+
+        function createBoard() {//as name impies creates the board
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    let cell = document.createElement("div");
+                    cell.classList.add("cell", (row + col) % 2 === 0 ? "white" : "black");
+
+                    cell.dataset.col = col;
+                    cell.dataset.row = row;
+                    
+                    board.appendChild(cell);
+                    if (row < 3 && (row + col) % 2 !== 0)
+                        addPiece(cell, "red");
+                    if (row > 4 && (row + col) % 2 !== 0)
+                        addPiece(cell, "black-piece");
+                }
+            }
+        }
+
+        function addPiece(cell, color) {//adds the pawns
+            let piece = document.createElement("div");
+            piece.classList.add("piece", color);
+            piece.draggable = true;
+            piece.addEventListener("dragstart", dragStart);
+            cell.appendChild(piece);
+        }
+
+        
+
+
+
+        function dragStart(event) {//foundation function of turns
+            if (!(event.target.classList.contains(turn) || (event.target.classList.contains("king") && event.target.classList.contains(turn))))
+                return;
+
+            if (activeCapturePiece && event.target !== activeCapturePiece)
+                return;//handles multi capture rule
+
+            selectedPiece = event.target;
+            originCell = selectedPiece.parentElement;
+        }
+
+        board.addEventListener("dragover", (event) => event.preventDefault());//brain of turns
+        board.addEventListener("drop", (event) => {
+
+            event.preventDefault();
+
+            let targetCell = event.target.classList.contains("cell") ? event.target : event.target.parentElement;
+            
+            if (targetCell.classList.contains("black") && !targetCell.firstChild && (ValidMove(originCell, targetCell))) {
+                targetCell.appendChild(selectedPiece);
+                originCell = targetCell; 
+                if ((turn === "red" && parseInt(originCell.dataset.row) === 7) || (turn === "black-piece" && parseInt(originCell.dataset.row) === 0)) {
+                    selectedPiece.classList.add("king");
+                }
+
+                if (moveResult === "continue") {
+                    moveResult = null;
+                    activeCapturePiece = selectedPiece; // Only allow further captures with this piece
+                }
+                else {
+                    activeCapturePiece = null; // Reset after a normal move
+                    turn = turn === "red" ? "black-piece" : "red"; // Switch turn if no more captures
+                }
+            }
+        });
+
+        function ValidMove(originCell, targetCell) {//checks if pawn movenment is valid
+            let originRow = parseInt(originCell.dataset.row);
+            let originCol = parseInt(originCell.dataset.col);
+            let targetRow = parseInt(targetCell.dataset.row);
+            let targetCol = parseInt(targetCell.dataset.col);//TODO: find better way to parse data (not important)
+
+            let rowDiff = targetRow - originRow;//direction only significant when piece is not kinged
+            let colDiff = Math.abs(targetCol - originCol);//direction never significant in all cases
+
+            console.log(`Checking move from (${originRow},${originCol}) to (${targetRow},${targetCol})`);
+
+            // Makes sure piece belongs to the correct turn
+            if (!(selectedPiece.classList.contains(turn) || (selectedPiece.classList.contains("king") && selectedPiece.classList.contains(turn)))) {
+                console.log("Move rejected: Not player's turn.");
+                return false;
+            }
+
+            if (selectedPiece.classList.contains("king")) {
+                // Kings move any direction, must be exactly 1 or 2 steps diagonally
+                if (Math.abs(rowDiff) === 1 && colDiff === 1) {
+                    console.log("Valid king move");
+                    return true; // Normal move
+                }
+                if (Math.abs(rowDiff) === 2 && colDiff === 2) {
+                    let middleCell = getMiddleCell(originRow, originCol, targetRow, targetCol);
+                    if (middleCell && middleCell.firstChild) {
+                        let middlePiece = middleCell.firstChild;
+                        if ((turn === "red" && middlePiece.classList.contains("black-piece")) || (turn === "black-piece" && middlePiece.classList.contains("red"))) {
+                            console.log("Valid king capture");
+                            middleCell.removeChild(middlePiece);
+                            moveResult = canCaptureAgain(targetCell) ? "continue" : true;
+                            return true; // Capture move
+                        }
+                    }
+                }
+            }//end of king rules
+            else {
+                if (turn === "red") {
+                    if (rowDiff === 1 && colDiff === 1) {
+                        console.log("Valid red move");
+                        return true; // Normal move forward for red
+                    }
+                    if (rowDiff === 2 && colDiff === 2 && rowDiff > 0) {//normal capture for red
+                        let middleCell = getMiddleCell(originRow, originCol, targetRow, targetCol);
+
+                        if (middleCell && middleCell.firstChild) {
+                            let middlePiece = middleCell.firstChild;
+                            if (middlePiece.classList.contains("black-piece")) {// destroy captured piece
+                                console.log("Valid red capture");
+                                middleCell.removeChild(middlePiece);
+                                moveResult = canCaptureAgain(targetCell) ? "continue" : true;
+                                return true;
+                            }
+                        }
+                    }
+                } else {
+                    if (rowDiff === -1 && colDiff === 1) {
+                        console.log("Valid black move");
+                        return true; // Normal move forward for black
+                    }
+                    if (rowDiff === -2 && colDiff === 2 && rowDiff < 0) {
+                        let middleCell = getMiddleCell(originRow, originCol, targetRow, targetCol);
+
+                        if (middleCell && middleCell.firstChild) {
+                            let middlePiece = middleCell.firstChild;
+                            if (middlePiece.classList.contains("red")) {// destroy captured piece
+                                console.log("Valid black capture");
+                                middleCell.removeChild(middlePiece);
+                                checkWinCondition();//this is the only time a win condition can occur.
+                                moveResult = canCaptureAgain(targetCell) ? "continue" : true;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }//
+            console.log("Invalid move");
+            return false;
+        }
+
+        function canCaptureAgain(pieceCell) {// check to see if another capture is possible
+            let row = parseInt(pieceCell.dataset.row);
+            let col = parseInt(pieceCell.dataset.col);
+            let isKing = selectedPiece.classList.contains("king");
+
+            let directions = isKing ?
+                [{ rowOffset: 2, colOffset: 2 }, { rowOffset: 2, colOffset: -2 },
+                    { rowOffset: -2, colOffset: 2 }, { rowOffset: -2, colOffset: -2 }]//is king
+                : turn === "red" ?
+                [{ rowOffset: 2, colOffset: 2 }, { rowOffset: 2, colOffset: -2 }] // Red moves downward only
+                :[{ rowOffset: -2, colOffset: 2 }, { rowOffset: -2, colOffset: -2 }]; // Black moves upward only
+
+            for (let dir of directions) {
+                let newRow = row + dir.rowOffset;
+                let newCol = col + dir.colOffset;
+                let middleCell = getMiddleCell(row, col, newRow, newCol);
+                let targetCell = document.querySelector(`[data-row="${newRow}"][data-col="${newCol}"]`);
+
+                if (targetCell && targetCell.classList.contains("black") && !targetCell.firstChild && middleCell && middleCell.firstChild) {
+                    let middlePiece = middleCell.firstChild;
+                    if ((turn === "red" && middlePiece.classList.contains("black-piece")) ||
+                        (turn === "black-piece" && middlePiece.classList.contains("red"))) {
+                        return true; // Another capture is possible
+                    }
+                }
+            }
+            return false;
+        }
+
+        function getMiddleCell(originRow, originCol, targetRow, targetCol) {
+            let middleRow = (originRow + targetRow) / 2;
+            let middleCol = (originCol + targetCol) / 2;
+            return document.querySelector(`[data-row="${middleRow}"][data-col="${middleCol}"]`);
+        }
+
+        function checkWinCondition() {//checks to see if a player has won
+            let redPieces = document.querySelectorAll(".red").length;
+            let blackPieces = document.querySelectorAll(".black-piece").length;
+
+            if (redPieces === 0) {
+                setTimeout(() => alert("Black Wins!"), 100);
+                return true;
+            } else if (blackPieces === 0) {
+                setTimeout(() => alert("Red Wins!"), 100);
+                return true;
+            }
+            return false;
+        }
+
+
+        createBoard();//TODO: Force players to capture pieces when ever possible.
+    </script>
+</body>
+</html>
